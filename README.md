@@ -1,6 +1,15 @@
-### DISCLAIMER: We will not use this project for Operating Systems and Lab (CS330) by Youngjin Kwon from 2025 Fall Semester.
+# Private Fork of pintos-kaist
 
-Brand new pintos for Operating Systems and Lab (CS330), KAIST, by Youngjin Kwon.
+학부인턴 Pintos 과제 기록
 
-The manual is available at https://casys-kaist.github.io/pintos-kaist/.
+## 환경설정
 
+```bash
+distrobox create -i ubuntu:18.04
+distrobox enter ubuntu-18-04
+```
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install gcc make qemu-system python3
+```
