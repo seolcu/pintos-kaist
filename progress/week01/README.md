@@ -78,7 +78,75 @@ gcc가 `-fno-plt` 옵션을 알아보지 못하는 모습입니다. 뭔가 이�
 
 그러자, 성공적으로 컴파일되었습니다.
 
+```
+$ pintos
+qemu-system-x86_64: warning: TCG doesn't support requested feature: CPUID.01H:ECX.vmx [bit 5]
+Kernel command line:
+0 ~ 9fc00 1
+100000 ~ ffe0000 1
+Pintos booting with:
+        base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
+        ext_mem: 0x100000 ~ 0xffe0000 (Usable: 260,992 kB)
+Calibrating timer...  261,734,400 loops/s.
+Boot complete.
+```
+
 환경 설정 방법을 [프로젝트 README](../../README.md)에 기록했습니다.
 
 ## PROJECT 1: THREADS
 
+### Alarm Clock
+
+우선 `threads/timer.c`를 보았다.
+
+```C
+/* Suspends execution for approximately TICKS timer ticks. */
+void timer_sleep(int64_t ticks)
+{
+	int64_t start = timer_ticks();
+
+	ASSERT(intr_get_level() == INTR_ON);
+	while (timer_elapsed(start) < ticks)
+		thread_yield();
+}
+```
+
+```C
+/* Timer interrupt handler. */
+static void
+timer_interrupt(struct intr_frame *args UNUSED)
+{
+	ticks++;
+	thread_tick();
+}
+```
+
+여기서 `timer_sleep` 함수는 틱을 다 채울때까지 `thread_yield`를 반복한다. 이로 인해 스레드가 실제로 중지되는 것이 아닌, while문이 돌며 순서만 계속 밀리는 busy wait을 하게 된다. 따라서 이를 위해선 `thread_block`을 통해 실제로 스레드를 정지해야한다.
+
+그러나, block을 해도 while문으로 반복하면서 틱을 채우는 방식인 것은 여전하다. 따라서, 깨우는 작업을 인터럽트 핸들러에게 맡기는 것이 좋아보인다. 그러려면, `timer_sleep`이 언제 어떤 스레드를 깨울지를 어딘가에 기록해두고, `timer_interrupt`가 이를 참고해 시간이 맞다면 해당 스레드를 깨우면 된다. 기록하는 도중 인터럽트가 발생해 race condition이 발생할 수 있으므로 (발생하는 것이 거의 당연하므로) 기록하는 동안에는 인터럽트를 disable하고, 기록이 끝나면 원래의 상태로 되돌려야 한다. (그냥 켜면 안된다. 기존의 상태가 꺼져 있는 상태였다면 그럴만한 이유가 있었을 것이므로)
+
+## 배운것
+
+```
+Some external interrupts cannot be postponed, even by disabling interrupts. These interrupts, called non-maskable interrupts (NMIs), are supposed to be used only in emergencies, e.g. when the computer is on fire. Pintos does not handle non-maskable interrupts.
+```
+
+```
+세마포어에서 P / V는 원래 네덜란드어 약자에서 온 고전 표기예요(디익스트라가 썼던 표기).
+
+P: Proberen (시도하다 / 검사하다)
+→ 보통 wait, down, acquire 라고도 부름
+→ 의미: “토큰 하나 가져가고(카운터 -1), 없으면 기다려”
+
+V: Verhogen (증가시키다)
+→ 보통 signal, up, release 라고도 부름
+→ 의미: “토큰 하나 돌려주고(카운터 +1), 기다리는 애 있으면 깨워”
+
+간단히 외우면:
+
+P = 들어가려는 동작(획득/대기)
+
+V = 나오는 동작(반납/깨우기)
+
+참고로 어떤 문서에서는 V를 Vrijgeven(해제하다)로 설명하기도 하는데, 핵심 동작은 똑같아요.
+```
