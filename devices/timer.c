@@ -29,13 +29,6 @@ static bool too_many_loops(unsigned loops);
 static void busy_wait(int64_t loops);
 static void real_time_sleep(int64_t num, int32_t denom);
 
-static struct sleeping_thread
-{
-	struct list_elem elem;
-	int64_t wake_tick;
-	struct thread *thread;
-};
-
 static struct list sleeping_thread_list;
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
@@ -104,15 +97,12 @@ timer_elapsed(int64_t then)
 /* Suspends execution for approximately TICKS timer ticks. */
 void timer_sleep(int64_t ticks)
 {
-	struct sleeping_thread *st = malloc(sizeof(struct sleeping_thread));
-	st->wake_tick = timer_ticks() + ticks;
-	st->thread = thread_current();
+	struct thread *thread = thread_current();
+	thread->wake_tick = timer_ticks() + ticks;
 
 	enum intr_level old_level = intr_disable();
-
-	list_push_back(&sleeping_thread_list, &st->elem);
+	list_push_back(&sleeping_thread_list, &thread->sleep_elem);
 	thread_block();
-
 	intr_set_level(old_level);
 }
 
@@ -150,12 +140,11 @@ timer_interrupt(struct intr_frame *args UNUSED)
 	struct list_elem *e;
 	for (e = list_begin(&sleeping_thread_list); e != list_end(&sleeping_thread_list);)
 	{
-		struct sleeping_thread *st = list_entry(e, struct sleeping_thread, elem);
-		if (st->wake_tick < ticks)
+		struct thread *thread = list_entry(e, struct thread, sleep_elem);
+		if (thread->wake_tick <= ticks)
 		{
 			e = list_remove(e);
-			thread_unblock(st->thread);
-			free(st);
+			thread_unblock(thread);
 		}
 		else
 		{

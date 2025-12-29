@@ -260,6 +260,94 @@ Kernel panic in run: PANIC at ../../threads/synch.c:188 in lock_acquire(): asser
 
 #### 두번째 시도
 
+[thread.h](/include/threads/thread.h)에서 thread 구조체에 두 필드를 추가했습니다.
+
+```C
+struct thread
+{
+	/* Owned by thread.c. */
+	tid_t tid;				   /* Thread identifier. */
+	enum thread_status status; /* Thread state. */
+	char name[16];			   /* Name (for debugging purposes). */
+	int priority;			   /* Priority. */
+
+	/* Shared between thread.c and synch.c. */
+	struct list_elem elem; /* List element. */
+
+#ifdef USERPROG
+	/* Owned by userprog/process.c. */
+	uint64_t *pml4; /* Page map level 4 */
+#endif
+#ifdef VM
+	/* Table for whole virtual memory owned by thread. */
+	struct supplemental_page_table spt;
+#endif
+
+	/* Owned by thread.c. */
+	struct intr_frame tf; /* Information for switching */
+	unsigned magic;		  /* Detects stack overflow. */
+
+	// for timer sleep
+	int64_t wake_tick;
+	struct list_elem sleep_elem;
+};
+```
+
+이후 [timer.c](/devices/timer.c)에서 첫번째 시도에서 만들었던 sleeping_thread 구조체를 제거하고 코드를 수정했습니다. 이 과정에서 동적 할당과 free가 모두 제거되었습니다.
+
+```C
+void timer_sleep(int64_t ticks)
+{
+	struct thread *thread = thread_current();
+	thread->wake_tick = timer_ticks() + ticks;
+
+	enum intr_level old_level = intr_disable();
+	list_push_back(&sleeping_thread_list, &thread->sleep_elem);
+	thread_block();
+	intr_set_level(old_level);
+}
+```
+
+```C
+static void
+timer_interrupt(struct intr_frame *args UNUSED)
+{
+	ticks++;
+	thread_tick();
+
+	struct list_elem *e;
+	for (e = list_begin(&sleeping_thread_list); e != list_end(&sleeping_thread_list);)
+	{
+		struct thread *thread = list_entry(e, struct thread, sleep_elem);
+		if (thread->wake_tick <= ticks)
+		{
+			e = list_remove(e);
+			thread_unblock(thread);
+		}
+		else
+		{
+			e = list_next(e);
+		}
+	}
+}
+```
+
+이후 `make check`로 확인해보니, 세 테스트 모두 통과한 것을 확인할 수 있었습니다.
+
+```
+pintos -v -k -T 60 -m 20   -- -q   run alarm-single < /dev/null 2> tests/threads/alarm-single.errors > tests/threads/alarm-single.output
+perl -I../.. ../../tests/threads/alarm-single.ck tests/threads/alarm-single tests/threads/alarm-single.result
+pass tests/threads/alarm-single
+pintos -v -k -T 60 -m 20   -- -q   run alarm-multiple < /dev/null 2> tests/threads/alarm-multiple.errors > tests/threads/alarm-multiple.output
+perl -I../.. ../../tests/threads/alarm-multiple.ck tests/threads/alarm-multiple tests/threads/alarm-multiple.result
+pass tests/threads/alarm-multiple
+pintos -v -k -T 60 -m 20   -- -q   run alarm-simultaneous < /dev/null 2> tests/threads/alarm-simultaneous.errors > tests/threads/alarm-simultaneous.output
+perl -I../.. ../../tests/threads/alarm-simultaneous.ck tests/threads/alarm-simultaneous tests/threads/alarm-simultaneous.result
+pass tests/threads/alarm-simultaneous
+```
+
+### Priority Scheduling
+
 ## 배운것
 
 ```
