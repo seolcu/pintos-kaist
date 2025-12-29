@@ -1,1 +1,11 @@
-PASS
+FAIL
+Kernel panic in run: PANIC at ../../threads/synch.c:188 in lock_acquire(): assertion `!intr_context ()' failed.
+Call stack: 0x8004213289 0x8004209b23 0x800420b533 0x800420d01e 0x80042086f8 0x8004208b16 0x8004207187
+Translation of call stack:
+0x0000008004213289: debug_panic (lib/kernel/debug.c:32)
+0x0000008004209b23: lock_acquire (threads/synch.c:189)
+0x000000800420b533: free (threads/malloc.c:219)
+0x000000800420d01e: timer_interrupt (devices/timer.c:158)
+0x00000080042086f8: intr_handler (threads/interrupt.c:352)
+0x0000008004208b16: intr_entry (threads/intr-stubs.o:?)
+0x0000008004207187: kernel_thread (threads/thread.c:394)
