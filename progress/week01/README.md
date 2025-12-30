@@ -348,6 +348,8 @@ pass tests/threads/alarm-simultaneous
 
 ### Priority Scheduling
 
+우선 priority scheduling을 구현한 후, 그 다음 priority donation을 구현해야 합니다.
+
 ## 배운것
 
 ```
