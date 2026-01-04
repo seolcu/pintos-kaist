@@ -312,6 +312,7 @@ void thread_yield(void)
 void thread_set_priority(int new_priority)
 {
 	thread_current()->priority = new_priority;
+	thread_yield();
 }
 
 /* Returns the current thread's priority. */
@@ -419,6 +420,8 @@ bool thread_priority_less(const struct list_elem *a, const struct list_elem *b,
 {
 	struct thread *ta = list_entry(a, struct thread, elem);
 	struct thread *tb = list_entry(b, struct thread, elem);
+
+	// Higher priority value means higher priority, so we use greater-than here.
 	return ta->priority > tb->priority;
 }
 
