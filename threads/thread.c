@@ -414,6 +414,14 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->magic = THREAD_MAGIC;
 }
 
+bool thread_priority_less(const struct list_elem *a, const struct list_elem *b,
+						  void *aux UNUSED)
+{
+	struct thread *ta = list_entry(a, struct thread, elem);
+	struct thread *tb = list_entry(b, struct thread, elem);
+	return ta->priority > tb->priority;
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -425,7 +433,10 @@ next_thread_to_run(void)
 	if (list_empty(&ready_list))
 		return idle_thread;
 	else
+	{
+		list_sort(&ready_list, (list_less_func *)thread_priority_less, NULL);
 		return list_entry(list_pop_front(&ready_list), struct thread, elem);
+	}
 }
 
 /* Use iretq to launch the thread */
