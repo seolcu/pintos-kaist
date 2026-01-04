@@ -345,33 +345,3 @@ pintos -v -k -T 60 -m 20   -- -q   run alarm-simultaneous < /dev/null 2> tests/t
 perl -I../.. ../../tests/threads/alarm-simultaneous.ck tests/threads/alarm-simultaneous tests/threads/alarm-simultaneous.result
 pass tests/threads/alarm-simultaneous
 ```
-
-### Priority Scheduling
-
-우선 priority scheduling을 구현한 후, 그 다음 priority donation을 구현해야 합니다.
-
-## 배운것
-
-```
-Some external interrupts cannot be postponed, even by disabling interrupts. These interrupts, called non-maskable interrupts (NMIs), are supposed to be used only in emergencies, e.g. when the computer is on fire. Pintos does not handle non-maskable interrupts.
-```
-
-```
-세마포어에서 P / V는 원래 네덜란드어 약자에서 온 고전 표기예요(디익스트라가 썼던 표기).
-
-P: Proberen (시도하다 / 검사하다)
-→ 보통 wait, down, acquire 라고도 부름
-→ 의미: “토큰 하나 가져가고(카운터 -1), 없으면 기다려”
-
-V: Verhogen (증가시키다)
-→ 보통 signal, up, release 라고도 부름
-→ 의미: “토큰 하나 돌려주고(카운터 +1), 기다리는 애 있으면 깨워”
-
-간단히 외우면:
-
-P = 들어가려는 동작(획득/대기)
-
-V = 나오는 동작(반납/깨우기)
-
-참고로 어떤 문서에서는 V를 Vrijgeven(해제하다)로 설명하기도 하는데, 핵심 동작은 똑같아요.
-```
