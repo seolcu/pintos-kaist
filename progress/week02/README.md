@@ -285,4 +285,92 @@ acquire2_thread_func (void *lock_)
 }
 ```
 
-메인 스레드가 우선순위가 더 높은 두 스레드에게 priority donation을 받아야 합니다. `/threads/synch.c` 파일의 `lock_acquire` 함수에 priority donation 코드를 추가해야 합니다.
+메인 스레드가 우선순위가 더 높은 두 스레드에게 priority donation을 받아야 합니다.
+
+우선, `struct thread`에 두 개의 필드를 추가했습니다.
+
+```C
+int original_priority;
+struct lock *wait_on_lock;
+```
+
+`init_thread`에서 이 필드들을 초기화하고, `thread_set_priority`에서도 `original_priority`를 함께 업데이트하도록 수정했습니다.
+
+그 다음, `/threads/synch.c`의 `lock_acquire`에서 lock holder의 우선순위보다 현재 스레드의 우선순위가 높으면 donation을 수행하도록 했습니다.
+
+```C
+void lock_acquire(struct lock *lock)
+{
+	ASSERT(lock != NULL);
+	ASSERT(!intr_context());
+	ASSERT(!lock_held_by_current_thread(lock));
+
+	struct thread *curr = thread_current();
+
+	/* Priority donation */
+	if (lock->holder != NULL)
+	{
+		curr->wait_on_lock = lock;
+		if (lock->holder->priority < curr->priority)
+			lock->holder->priority = curr->priority;
+	}
+
+	sema_down(&lock->semaphore);
+
+	curr->wait_on_lock = NULL;
+	lock->holder = curr;
+}
+```
+
+`lock_release`에서는 원래 우선순위로 복원하도록 했습니다.
+
+```C
+void lock_release(struct lock *lock)
+{
+	ASSERT(lock != NULL);
+	ASSERT(lock_held_by_current_thread(lock));
+
+	lock->holder = NULL;
+	sema_up(&lock->semaphore);
+
+	/* Restore original priority after release */
+	thread_current()->priority = thread_current()->original_priority;
+	thread_yield();
+}
+```
+
+마지막으로, `sema_up`에서 waiter 중 가장 높은 우선순위를 가진 스레드를 먼저 깨우도록 수정했습니다.
+
+```C
+void sema_up(struct semaphore *sema)
+{
+	enum intr_level old_level;
+
+	ASSERT(sema != NULL);
+
+	old_level = intr_disable();
+	if (!list_empty(&sema->waiters))
+	{
+		/* Find highest priority waiter */
+		struct list_elem *max_elem = list_begin(&sema->waiters);
+		struct list_elem *e;
+		for (e = list_begin(&sema->waiters); e != list_end(&sema->waiters); e = list_next(e))
+		{
+			struct thread *t = list_entry(e, struct thread, elem);
+			struct thread *max_t = list_entry(max_elem, struct thread, elem);
+			if (t->priority > max_t->priority)
+				max_elem = e;
+		}
+		list_remove(max_elem);
+		thread_unblock(list_entry(max_elem, struct thread, elem));
+	}
+	sema->value++;
+	intr_set_level(old_level);
+}
+```
+
+이후 `make check`을 해보니 priority-donate-one 테스트가 통과했습니다.
+
+```
+pass tests/threads/priority-donate-one
+```
