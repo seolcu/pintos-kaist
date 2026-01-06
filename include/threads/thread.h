@@ -94,6 +94,8 @@ struct thread
 	int priority;			   /* Priority. */
 	int original_priority;
 	struct lock *wait_on_lock;
+	struct list donations;
+	struct list_elem donation_elem;
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem; /* List element. */

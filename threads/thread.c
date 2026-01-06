@@ -313,8 +313,18 @@ void thread_yield(void)
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void thread_set_priority(int new_priority)
 {
-	thread_current()->original_priority = new_priority;
-	thread_current()->priority = new_priority;
+	struct thread *curr = thread_current();
+	curr->original_priority = new_priority;
+
+	int max_priority = new_priority;
+	struct list_elem *e;
+	for (e = list_begin(&curr->donations); e != list_end(&curr->donations); e = list_next(e))
+	{
+		struct thread *t = list_entry(e, struct thread, donation_elem);
+		if (t->priority > max_priority)
+			max_priority = t->priority;
+	}
+	curr->priority = max_priority;
 	thread_yield();
 }
 
@@ -417,6 +427,7 @@ init_thread(struct thread *t, const char *name, int priority)
 	t->priority = priority;
 	t->original_priority = priority;
 	t->wait_on_lock = NULL;
+	list_init(&t->donations);
 	t->magic = THREAD_MAGIC;
 }
 
