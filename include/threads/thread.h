@@ -1,21 +1,24 @@
 #ifndef THREADS_THREAD_H
 #define THREADS_THREAD_H
 
+#include "threads/interrupt.h"
+#include "threads/synch.h"
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
-#include "threads/interrupt.h"
 #ifdef VM
 #include "vm/vm.h"
 #endif
+#ifdef USERPROG
+struct file;
+#endif
 
 /* States in a thread's life cycle. */
-enum thread_status
-{
-	THREAD_RUNNING, /* Running thread. */
-	THREAD_READY,	/* Not running but ready to run. */
-	THREAD_BLOCKED, /* Waiting for an event to trigger. */
-	THREAD_DYING	/* About to be destroyed. */
+enum thread_status {
+  THREAD_RUNNING, /* Running thread. */
+  THREAD_READY,   /* Not running but ready to run. */
+  THREAD_BLOCKED, /* Waiting for an event to trigger. */
+  THREAD_DYING    /* About to be destroyed. */
 };
 
 /* Thread identifier type.
@@ -24,9 +27,9 @@ typedef int tid_t;
 #define TID_ERROR ((tid_t) - 1) /* Error value for tid_t. */
 
 /* Thread priorities. */
-#define PRI_MIN 0	   /* Lowest priority. */
+#define PRI_MIN 0      /* Lowest priority. */
 #define PRI_DEFAULT 31 /* Default priority. */
-#define PRI_MAX 63	   /* Highest priority. */
+#define PRI_MAX 63     /* Highest priority. */
 
 /* A kernel thread or user process.
  *
@@ -85,37 +88,45 @@ typedef int tid_t;
  * only because they are mutually exclusive: only a thread in the
  * ready state is on the run queue, whereas only a thread in the
  * blocked state is on a semaphore wait list. */
-struct thread
-{
-	/* Owned by thread.c. */
-	tid_t tid;				   /* Thread identifier. */
-	enum thread_status status; /* Thread state. */
-	char name[16];			   /* Name (for debugging purposes). */
-	int priority;			   /* Priority. */
-	int original_priority;
-	struct lock *wait_on_lock;
-	struct list donations;
-	struct list_elem donation_elem;
+struct thread {
+  /* Owned by thread.c. */
+  tid_t tid;                 /* Thread identifier. */
+  enum thread_status status; /* Thread state. */
+  char name[16];             /* Name (for debugging purposes). */
+  int priority;              /* Priority. */
+  int original_priority;
+  struct lock *wait_on_lock;
+  struct list donations;
+  struct list_elem donation_elem;
 
-	/* Shared between thread.c and synch.c. */
-	struct list_elem elem; /* List element. */
+  /* Shared between thread.c and synch.c. */
+  struct list_elem elem; /* List element. */
 
 #ifdef USERPROG
-	/* Owned by userprog/process.c. */
-	uint64_t *pml4; /* Page map level 4 */
+  /* Owned by userprog/process.c. */
+  uint64_t *pml4; /* Page map level 4 */
+
+  /* File descriptors. */
+  struct file *fd_table[128];
+  int next_fd;
 #endif
 #ifdef VM
-	/* Table for whole virtual memory owned by thread. */
-	struct supplemental_page_table spt;
+  /* Table for whole virtual memory owned by thread. */
+  struct supplemental_page_table spt;
 #endif
 
-	/* Owned by thread.c. */
-	struct intr_frame tf; /* Information for switching */
-	unsigned magic;		  /* Detects stack overflow. */
+  /* Owned by thread.c. */
+  struct intr_frame tf; /* Information for switching */
+  unsigned magic;       /* Detects stack overflow. */
 
-	// for timer sleep
-	int64_t wake_tick;
-	struct list_elem sleep_elem;
+  // for timer sleep
+  int64_t wake_tick;
+  struct list_elem sleep_elem;
+
+  // for process wait
+  struct semaphore wait_sema;
+  int exit_status;
+  struct thread *parent;
 };
 
 /* If false (default), use round-robin scheduler.

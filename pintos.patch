@@ -1,0 +1,159 @@
+diff --git a/lib/user/user.lds b/lib/user/user.lds
+index af6c54b..6072be4 100644
+--- a/lib/user/user.lds
++++ b/lib/user/user.lds
+@@ -18,8 +18,12 @@ SECTIONS
+      the same address within the page on the next page up.  */
+   . = DATA_SEGMENT_ALIGN (CONSTANT (MAXPAGESIZE), CONSTANT (COMMONPAGESIZE));
+ 
++  .data : ALIGN(4096) { *(.data) }
++  .bss : ALIGN(4096) { *(.bss) }
++  /*
+   .data : { *(.data) }
+   .bss : { *(.bss) }
++  */
+ 
+   . = DATA_SEGMENT_RELRO_END (0, .);
+ 
+diff --git a/tests/filesys/base/child-syn-read.c b/tests/filesys/base/child-syn-read.c
+index 77a5e26..1afceec 100644
+--- a/tests/filesys/base/child-syn-read.c
++++ b/tests/filesys/base/child-syn-read.c
+@@ -11,13 +11,13 @@
+ #include "tests/lib.h"
+ #include "tests/filesys/base/syn-read.h"
+ 
+-const char *test_name = "child-syn-read";
+ 
+ static char buf[BUF_SIZE];
+ 
+ int
+ main (int argc, const char *argv[]) 
+ {
++ test_name = "child-syn-read";
+   int child_idx;
+   int fd;
+   size_t i;
+diff --git a/tests/userprog/child-close.c b/tests/userprog/child-close.c
+index 20b6923..ae4187d 100644
+--- a/tests/userprog/child-close.c
++++ b/tests/userprog/child-close.c
+@@ -12,11 +12,11 @@
+ #include "tests/userprog/sample.inc"
+ #include "tests/lib.h"
+ 
+-const char *test_name = "child-close";
+ 
+ int
+ main (int argc UNUSED, char *argv[]) 
+ {
++	test_name = "child-close";
+   msg ("begin");
+   
+   if (!isdigit (*argv[1]))
+diff --git a/tests/userprog/child-read.c b/tests/userprog/child-read.c
+index 7f85844..1069212 100644
+--- a/tests/userprog/child-read.c
++++ b/tests/userprog/child-read.c
+@@ -14,7 +14,6 @@
+ #include "tests/userprog/sample.inc"
+ #include "tests/lib.h"
+ 
+-const char *test_name = "child-read";
+ 
+ int
+ main (int argc UNUSED, char *argv[]) 
+@@ -23,6 +22,7 @@ main (int argc UNUSED, char *argv[])
+   int byte_cnt;
+   char *buffer;
+   msg ("begin");
++	test_name = "child-read";
+  
+   if (!isdigit (*argv[1]))
+     fail ("bad command-line arguments");
+diff --git a/tests/userprog/child-rox.c b/tests/userprog/child-rox.c
+index 929df94..aaf6de9 100644
+--- a/tests/userprog/child-rox.c
++++ b/tests/userprog/child-rox.c
+@@ -10,7 +10,6 @@
+ #include <syscall.h>
+ #include "tests/lib.h"
+ 
+-const char *test_name = "child-rox";
+ 
+ static void
+ try_write (void) 
+@@ -31,6 +30,7 @@ try_write (void)
+ int
+ main (int argc UNUSED, char *argv[]) 
+ {
++	test_name = "child-rox";
+   msg ("begin");
+   try_write ();
+ 
+diff --git a/tests/userprog/child-simple.c b/tests/userprog/child-simple.c
+index 35a49c7..524a8be 100644
+--- a/tests/userprog/child-simple.c
++++ b/tests/userprog/child-simple.c
+@@ -5,10 +5,10 @@
+ #include <stdio.h>
+ #include "tests/lib.h"
+ 
+-const char *test_name = "child-simple";
+ int
+ main (void) 
+ {
++	test_name = "child-simple";
+   msg ("run");
+   return 81;
+ }
+diff --git a/tests/userprog/multi-recurse.c b/tests/userprog/multi-recurse.c
+index 7d07038..1bcce2a 100644
+--- a/tests/userprog/multi-recurse.c
++++ b/tests/userprog/multi-recurse.c
+@@ -7,12 +7,12 @@
+ #include <syscall.h>
+ #include "tests/lib.h"
+ 
+-const char *test_name = "multi-recurse";
+ 
+ int
+ main (int argc UNUSED, char *argv[]) 
+ {
+   int n = atoi (argv[1]);
++  test_name = "multi-recurse";
+ 
+   msg ("begin %d", n);
+   if (n != 0) 
+diff --git a/tests/userprog/no-vm/multi-oom.c b/tests/userprog/no-vm/multi-oom.c
+index 4cc7823..c467500 100644
+--- a/tests/userprog/no-vm/multi-oom.c
++++ b/tests/userprog/no-vm/multi-oom.c
+@@ -34,7 +34,6 @@
+ static const int EXPECTED_DEPTH_TO_PASS = 10;
+ static const int EXPECTED_REPETITIONS = 10;
+ 
+-const char *test_name = "multi-oom";
+ 
+ int make_children (void);
+ 
+@@ -142,6 +141,7 @@ make_children (void) {
+ int
+ main (int argc UNUSED, char *argv[] UNUSED) {
+   msg ("begin");
++test_name = "multi-oom";
+ 
+   int first_run_depth = make_children ();
+   CHECK (first_run_depth >= EXPECTED_DEPTH_TO_PASS, "Spawned at least %d children.", EXPECTED_DEPTH_TO_PASS);
+diff --git a/userprog/process.c b/userprog/process.c
+index 9388e50..6382ca8 100644
+--- a/userprog/process.c
++++ b/userprog/process.c
+@@ -204,6 +204,7 @@ process_wait (tid_t child_tid UNUSED) {
+ 	/* XXX: Hint) The pintos exit if process_wait (initd), we recommend you
+ 	 * XXX:       to add infinite loop here before
+ 	 * XXX:       implementing the process_wait. */
++	while (1);
+ 	return -1;
+ }
+ 

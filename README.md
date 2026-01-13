@@ -14,6 +14,12 @@ sudo apt update && sudo apt upgrade -y
 sudo apt install gcc make qemu-system python3
 ```
 
+## `pintos` 명령어 추가
+
+```bash
+echo "source $(pwd)/activate" >> ~/.bashrc
+```
+
 ## IDE 설정 (clangd)
 
 IDE에서 코드 자동완성 및 에러 표시를 위해 clangd 설정이 필요합니다:
