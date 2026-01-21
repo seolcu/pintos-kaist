@@ -13,6 +13,7 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
+#include "userprog/process.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -86,9 +87,16 @@ static char *copy_in_string(const char *ustr) {
 
   for (size_t i = 0; i < PGSIZE; i++) {
     const void *uaddr = (const void *)(ustr + i);
-    validate_user_address(uaddr);
-
+    if (uaddr == NULL || !is_user_vaddr(uaddr) || curr->pml4 == NULL) {
+      palloc_free_page(kstr);
+      sys_exit(-1);
+    }
     const char *kaddr = pml4_get_page(curr->pml4, uaddr);
+    if (kaddr == NULL) {
+      palloc_free_page(kstr);
+      sys_exit(-1);
+    }
+
     kstr[i] = *kaddr;
     if (kstr[i] == '\0')
       return kstr;
@@ -120,6 +128,7 @@ static int allocate_fd(struct file *file) {
       return fd;
     }
   }
+  curr->next_fd = 128;
   return -1;
 }
 
@@ -172,6 +181,27 @@ void syscall_handler(struct intr_frame *f) {
 
   case SYS_EXIT:
     sys_exit((int)f->R.rdi);
+
+  case SYS_FORK: {
+    char *thread_name = copy_in_string((const char *)f->R.rdi);
+    tid_t tid = process_fork(thread_name, f);
+    palloc_free_page(thread_name);
+    f->R.rax = tid;
+    return;
+  }
+
+  case SYS_EXEC: {
+    char *cmd_line = copy_in_string((const char *)f->R.rdi);
+    int result = process_exec(cmd_line);
+    f->R.rax = result;
+    return;
+  }
+
+  case SYS_WAIT: {
+    tid_t tid = (tid_t)f->R.rdi;
+    f->R.rax = process_wait(tid);
+    return;
+  }
 
   case SYS_CREATE: {
     char *file = copy_in_string((const char *)f->R.rdi);

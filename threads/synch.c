@@ -99,6 +99,7 @@ bool sema_try_down(struct semaphore *sema) {
    This function may be called from an interrupt handler. */
 void sema_up(struct semaphore *sema) {
   enum intr_level old_level;
+  struct thread *unblocked = NULL;
 
   ASSERT(sema != NULL);
 
@@ -115,10 +116,15 @@ void sema_up(struct semaphore *sema) {
         max_elem = e;
     }
     list_remove(max_elem);
-    thread_unblock(list_entry(max_elem, struct thread, elem));
+    unblocked = list_entry(max_elem, struct thread, elem);
+    thread_unblock(unblocked);
   }
   sema->value++;
   intr_set_level(old_level);
+
+  if (unblocked != NULL && !intr_context() &&
+      unblocked->priority > thread_current()->priority)
+    thread_yield();
 }
 
 static void sema_test_helper(void *sema_);
@@ -252,7 +258,6 @@ void lock_release(struct lock *lock) {
   }
 
   lock->holder = NULL;
-  sema_up(&lock->semaphore);
 
   /* Recalculate priority from remaining donations */
   int max_priority = curr->original_priority;
@@ -263,8 +268,8 @@ void lock_release(struct lock *lock) {
       max_priority = t->priority;
   }
   curr->priority = max_priority;
-  if (intr_get_level() == INTR_ON)
-    thread_yield();
+
+  sema_up(&lock->semaphore);
 }
 
 /* Returns true if the current thread holds LOCK, false

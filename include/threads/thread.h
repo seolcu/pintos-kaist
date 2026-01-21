@@ -11,6 +11,7 @@
 #endif
 #ifdef USERPROG
 struct file;
+struct child_info;
 #endif
 
 /* States in a thread's life cycle. */
@@ -109,6 +110,10 @@ struct thread {
   /* File descriptors. */
   struct file *fd_table[128];
   int next_fd;
+  struct list children;
+  struct lock children_lock;
+  struct child_info *child_info;
+  struct file *exec_file;
 #endif
 #ifdef VM
   /* Table for whole virtual memory owned by thread. */

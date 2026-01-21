@@ -398,6 +398,10 @@ static void init_thread(struct thread *t, const char *name, int priority) {
   t->parent = NULL;
 #ifdef USERPROG
   t->next_fd = 2;
+  list_init(&t->children);
+  lock_init(&t->children_lock);
+  t->child_info = NULL;
+  t->exec_file = NULL;
 #endif
   t->magic = THREAD_MAGIC;
 }
