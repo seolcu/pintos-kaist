@@ -13,6 +13,7 @@
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include <debug.h>
 #include <inttypes.h>
 #include <round.h>
@@ -63,7 +64,12 @@ static struct child_info *find_child_info(struct thread *parent, tid_t tid) {
 }
 
 /* General process initializer for initd and other process. */
-static void process_init(void) { struct thread *current = thread_current(); }
+static void process_init(void) {
+  struct thread *current = thread_current();
+#ifdef VM
+  list_init(&current->mmap_list);
+#endif
+}
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
  * The new thread may be scheduled (and may even exit)
@@ -565,14 +571,19 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   process_activate(thread_current());
 
   /* Open executable file. */
+  lock_acquire(&filesys_lock);
   file = filesys_open(file_name);
+  lock_release(&filesys_lock);
   if (file == NULL) {
     printf("load: %s: open failed\n", file_name);
     goto done;
   }
 
   /* Read and verify executable header. */
-  if (file_read(file, &ehdr, sizeof ehdr) != sizeof ehdr ||
+  lock_acquire(&filesys_lock);
+  int ehdr_n = file_read(file, &ehdr, sizeof ehdr);
+  lock_release(&filesys_lock);
+  if (ehdr_n != sizeof ehdr ||
       memcmp(ehdr.e_ident, "\177ELF\2\1\1", 7) || ehdr.e_type != 2 ||
       ehdr.e_machine != 0x3E // amd64
       || ehdr.e_version != 1 || ehdr.e_phentsize != sizeof(struct Phdr) ||
@@ -588,9 +599,12 @@ static bool load(const char *file_name, struct intr_frame *if_) {
 
     if (file_ofs < 0 || file_ofs > file_length(file))
       goto done;
+    lock_acquire(&filesys_lock);
     file_seek(file, file_ofs);
+    int phdr_n = file_read(file, &phdr, sizeof phdr);
+    lock_release(&filesys_lock);
 
-    if (file_read(file, &phdr, sizeof phdr) != sizeof phdr)
+    if (phdr_n != sizeof phdr)
       goto done;
     file_ofs += sizeof phdr;
     switch (phdr.p_type) {
@@ -640,19 +654,23 @@ static bool load(const char *file_name, struct intr_frame *if_) {
   /* Start address. */
   if_->rip = ehdr.e_entry;
 
-  /* TODO: Your code goes here.
-   * TODO: Implement argument passing (see project2/argument_passing.html). */
+	/* TODO: Your code goes here.
+	 * TODO: Implement argument passing (see project2/argument_passing.html). */
 
-  success = true;
+	success = true;
 
-  file_deny_write(file);
-  t->exec_file = file;
-  file = NULL;
+	lock_acquire(&filesys_lock);
+	file_deny_write(file);
+	lock_release(&filesys_lock);
+	t->exec_file = file;
+	file = NULL;
 
 done:
-  /* We arrive here whether the load is successful or not. */
-  file_close(file);
-  return success;
+	/* We arrive here whether the load is successful or not. */
+	lock_acquire(&filesys_lock);
+	file_close(file);
+	lock_release(&filesys_lock);
+	return success;
 }
 
 /* Checks whether PHDR describes a valid, loadable segment in
@@ -809,8 +827,10 @@ static bool lazy_load_segment(struct page *page, void *aux) {
 
   free(args);
 
-  if (file_read_at(file, page->frame->kva, read_bytes, ofs) !=
-      (int)read_bytes)
+  lock_acquire(&filesys_lock);
+  int n = file_read_at(file, page->frame->kva, read_bytes, ofs);
+  lock_release(&filesys_lock);
+  if (n != (int)read_bytes)
     return false;
   memset(page->frame->kva + read_bytes, 0, zero_bytes);
   return true;

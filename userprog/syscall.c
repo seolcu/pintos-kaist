@@ -14,6 +14,10 @@
 #include "threads/vaddr.h"
 #include "userprog/gdt.h"
 #include "userprog/process.h"
+#ifdef VM
+#include "vm/vm.h"
+#include "vm/file.h"
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -22,7 +26,7 @@
 void syscall_entry(void);
 void syscall_handler(struct intr_frame *);
 
-static struct lock filesys_lock;
+struct lock filesys_lock;
 
 static void sys_exit(int status) NO_RETURN;
 static void sys_exit(int status) {
@@ -35,8 +39,19 @@ static void validate_user_address(const void *uaddr) {
   struct thread *curr = thread_current();
   if (uaddr == NULL || !is_user_vaddr(uaddr))
     sys_exit(-1);
-  if (curr->pml4 == NULL || pml4_get_page(curr->pml4, uaddr) == NULL)
+  if (curr->pml4 == NULL)
     sys_exit(-1);
+
+  if (pml4_get_page(curr->pml4, uaddr) == NULL) {
+#ifdef VM
+    if (!vm_claim_page(pg_round_down(uaddr)))
+      sys_exit(-1);
+    if (pml4_get_page(curr->pml4, uaddr) == NULL)
+      sys_exit(-1);
+#else
+    sys_exit(-1);
+#endif
+  }
 }
 
 static void validate_user_buffer(const void *buffer, size_t size) {
@@ -69,6 +84,8 @@ static void validate_user_writable_buffer(void *buffer, size_t size) {
 
   for (uintptr_t page = (uintptr_t)pg_round_down((const void *)start);
        page <= (uintptr_t)pg_round_down((const void *)end); page += PGSIZE) {
+    /* Make sure the page is present (lazy/swap-in). */
+    validate_user_address((const void *)page);
     uint64_t *pte = pml4e_walk(curr->pml4, page, 0);
     if (pte == NULL || ((*pte & PTE_P) == 0) || !is_user_pte(pte) ||
         !is_writable(pte))
@@ -93,8 +110,20 @@ static char *copy_in_string(const char *ustr) {
     }
     const char *kaddr = pml4_get_page(curr->pml4, uaddr);
     if (kaddr == NULL) {
+#ifdef VM
+      if (!vm_claim_page(pg_round_down(uaddr))) {
+        palloc_free_page(kstr);
+        sys_exit(-1);
+      }
+      kaddr = pml4_get_page(curr->pml4, uaddr);
+      if (kaddr == NULL) {
+        palloc_free_page(kstr);
+        sys_exit(-1);
+      }
+#else
       palloc_free_page(kstr);
       sys_exit(-1);
+#endif
     }
 
     kstr[i] = *kaddr;
@@ -402,6 +431,31 @@ void syscall_handler(struct intr_frame *f) {
     lock_release(&filesys_lock);
     return;
   }
+
+#ifdef VM
+  case SYS_MMAP: {
+    void *addr = (void *)f->R.rdi;
+    size_t length = (size_t)f->R.rsi;
+    int writable = (int)f->R.rdx;
+    int fd = (int)f->R.r10;
+    off_t offset = (off_t)f->R.r8;
+
+    struct file *file = get_file(fd);
+    if (file == NULL) {
+      f->R.rax = (uint64_t)NULL;
+      return;
+    }
+
+    f->R.rax = (uint64_t)do_mmap(addr, length, writable, file, offset);
+    return;
+  }
+
+  case SYS_MUNMAP: {
+    void *addr = (void *)f->R.rdi;
+    do_munmap(addr);
+    return;
+  }
+#endif
 
   default:
     sys_exit(-1);

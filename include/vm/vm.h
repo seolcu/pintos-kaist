@@ -5,6 +5,7 @@
 #include "lib/kernel/hash.h"
 #include "filesys/off_t.h"
 #include <stddef.h>
+#include <list.h>
 
 enum vm_type {
 	/* page not initialized */
@@ -50,6 +51,7 @@ struct page {
 	struct frame *frame;   /* Back reference for frame */
 
 	/* Your implementation */
+	struct thread *owner;  /* Owning thread (for pml4 bits) */
 	struct hash_elem spt_elem;
 	bool writable;
 
@@ -69,6 +71,7 @@ struct page {
 struct frame {
 	void *kva;
 	struct page *page;
+	struct list_elem elem;
 };
 
 /* The function table for page operations.
