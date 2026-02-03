@@ -107,6 +107,9 @@ struct thread {
   /* Owned by userprog/process.c. */
   uint64_t *pml4; /* Page map level 4 */
 
+  /* Last known user stack pointer (for kernel-mode faults on user stack). */
+  uint64_t user_rsp;
+
   /* File descriptors. */
   struct file *fd_table[128];
   int next_fd;

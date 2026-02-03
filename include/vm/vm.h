@@ -54,6 +54,8 @@ struct page {
 	struct thread *owner;  /* Owning thread (for pml4 bits) */
 	struct hash_elem spt_elem;
 	bool writable;
+	bool cow;              /* Copy-on-write state (temporarily write-protected) */
+	struct list_elem frame_elem; /* Link in frame's page list */
 
 	/* Per-type data are binded into the union.
 	 * Each function automatically detects the current union */
@@ -70,7 +72,7 @@ struct page {
 /* The representation of "frame" */
 struct frame {
 	void *kva;
-	struct page *page;
+	struct list pages;     /* Pages sharing this frame */
 	struct list_elem elem;
 };
 

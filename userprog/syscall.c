@@ -87,9 +87,17 @@ static void validate_user_writable_buffer(void *buffer, size_t size) {
     /* Make sure the page is present (lazy/swap-in). */
     validate_user_address((const void *)page);
     uint64_t *pte = pml4e_walk(curr->pml4, page, 0);
-    if (pte == NULL || ((*pte & PTE_P) == 0) || !is_user_pte(pte) ||
-        !is_writable(pte))
+    if (pte == NULL || ((*pte & PTE_P) == 0) || !is_user_pte(pte))
       sys_exit(-1);
+    if (!is_writable(pte)) {
+#ifdef VM
+      struct page *p = spt_find_page(&curr->spt, (void *)page);
+      if (p == NULL || !p->writable)
+        sys_exit(-1);
+#else
+      sys_exit(-1);
+#endif
+    }
   }
 }
 
@@ -202,6 +210,10 @@ void syscall_init(void) {
 
 /* The main system call interface */
 void syscall_handler(struct intr_frame *f) {
+  /* Keep last user rsp for kernel-mode page faults. */
+  if (thread_current()->pml4 != NULL)
+    thread_current()->user_rsp = f->rsp;
+
   int syscall_num = f->R.rax;
 
   switch (syscall_num) {

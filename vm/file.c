@@ -70,7 +70,7 @@ file_backed_swap_out (struct page *page) {
 
 	if (page->frame != NULL) {
 		pml4_clear_page (t->pml4, page->va);
-		page->frame->page = NULL;
+		list_remove (&page->frame_elem);
 		page->frame = NULL;
 	}
 

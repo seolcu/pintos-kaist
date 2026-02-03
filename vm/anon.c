@@ -102,7 +102,7 @@ anon_swap_out (struct page *page) {
 	/* Unmap and detach from frame (frame is reused by eviction). */
 	if (page->owner != NULL)
 		pml4_clear_page (page->owner->pml4, page->va);
-	page->frame->page = NULL;
+	list_remove (&page->frame_elem);
 	page->frame = NULL;
 
 	return true;
@@ -122,7 +122,7 @@ anon_destroy (struct page *page) {
 	if (page->frame != NULL) {
 		if (page->owner != NULL)
 			pml4_clear_page (page->owner->pml4, page->va);
-		page->frame->page = NULL;
+		list_remove (&page->frame_elem);
 		page->frame = NULL;
 	}
 }
