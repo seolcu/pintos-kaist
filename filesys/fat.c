@@ -152,7 +152,24 @@ fat_boot_create (void) {
 
 void
 fat_fs_init (void) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (fat_fs->bs.sectors_per_cluster == SECTORS_PER_CLUSTER);
+
+	fat_fs->data_start = fat_fs->bs.fat_start + fat_fs->bs.fat_sectors;
+
+	/* Cluster numbers are 1-based (0 is reserved).
+	 * fat_length includes the unused entry 0.
+	 *
+	 * Usable clusters: [ROOT_DIR_CLUSTER, fat_length).
+	 * ROOT_DIR_CLUSTER itself is reserved for the root directory.
+	 */
+	const unsigned int data_sectors =
+	    fat_fs->bs.total_sectors > fat_fs->data_start
+	        ? fat_fs->bs.total_sectors - fat_fs->data_start
+	        : 0;
+	fat_fs->fat_length = data_sectors / fat_fs->bs.sectors_per_cluster + 1;
+	fat_fs->last_clst = fat_fs->bs.root_dir_cluster;
+	lock_init (&fat_fs->write_lock);
 }
 
 /*----------------------------------------------------------------------------*/
@@ -164,30 +181,98 @@ fat_fs_init (void) {
  * Returns 0 if fails to allocate a new cluster. */
 cluster_t
 fat_create_chain (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (fat_fs->fat != NULL);
+
+	lock_acquire (&fat_fs->write_lock);
+
+	cluster_t new_clst = 0;
+	cluster_t start = fat_fs->last_clst + 1;
+	if (start < ROOT_DIR_CLUSTER + 1)
+		start = ROOT_DIR_CLUSTER + 1;
+
+	for (cluster_t i = start; i < fat_fs->fat_length; i++)
+		if (fat_fs->fat[i] == 0) {
+			new_clst = i;
+			break;
+		}
+	if (new_clst == 0)
+		for (cluster_t i = ROOT_DIR_CLUSTER + 1; i < start && i < fat_fs->fat_length; i++)
+			if (fat_fs->fat[i] == 0) {
+				new_clst = i;
+				break;
+			}
+
+	if (new_clst != 0) {
+		static char zeros[DISK_SECTOR_SIZE];
+
+		/* Mark allocated and terminate chain. */
+		fat_fs->fat[new_clst] = EOChain;
+		if (clst != 0) {
+			ASSERT (clst < fat_fs->fat_length);
+			fat_fs->fat[clst] = new_clst;
+		}
+		fat_fs->last_clst = new_clst;
+		disk_write (filesys_disk, cluster_to_sector (new_clst), zeros);
+	}
+
+	lock_release (&fat_fs->write_lock);
+	return new_clst;
 }
 
 /* Remove the chain of clusters starting from CLST.
  * If PCLST is 0, assume CLST as the start of the chain. */
 void
 fat_remove_chain (cluster_t clst, cluster_t pclst) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (fat_fs->fat != NULL);
+
+	if (clst == 0)
+		return;
+
+	lock_acquire (&fat_fs->write_lock);
+
+	if (pclst != 0) {
+		ASSERT (pclst < fat_fs->fat_length);
+		fat_fs->fat[pclst] = EOChain;
+	}
+
+	cluster_t cur = clst;
+	while (cur != 0 && cur != EOChain) {
+		ASSERT (cur < fat_fs->fat_length);
+		cluster_t next = fat_fs->fat[cur];
+		fat_fs->fat[cur] = 0;
+		cur = next;
+	}
+
+	lock_release (&fat_fs->write_lock);
 }
 
 /* Update a value in the FAT table. */
 void
 fat_put (cluster_t clst, cluster_t val) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (fat_fs->fat != NULL);
+	ASSERT (clst > 0);
+	ASSERT (clst < fat_fs->fat_length);
+	fat_fs->fat[clst] = val;
 }
 
 /* Fetch a value in the FAT table. */
 cluster_t
 fat_get (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (fat_fs->fat != NULL);
+	ASSERT (clst > 0);
+	ASSERT (clst < fat_fs->fat_length);
+	return fat_fs->fat[clst];
 }
 
 /* Covert a cluster # to a sector number. */
 disk_sector_t
 cluster_to_sector (cluster_t clst) {
-	/* TODO: Your code goes here. */
+	ASSERT (fat_fs != NULL);
+	ASSERT (clst >= ROOT_DIR_CLUSTER);
+	ASSERT (clst < fat_fs->fat_length);
+	return fat_fs->data_start + (clst - ROOT_DIR_CLUSTER) * fat_fs->bs.sectors_per_cluster;
 }

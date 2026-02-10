@@ -1,8 +1,10 @@
 #include "userprog/syscall.h"
 #include "intrinsic.h"
 #include "devices/input.h"
+#include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
+#include "filesys/inode.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/init.h"
@@ -21,6 +23,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 
 void syscall_entry(void);
@@ -299,6 +302,10 @@ void syscall_handler(struct intr_frame *f) {
       f->R.rax = -1;
       return;
     }
+	if (inode_is_dir (file_get_inode (file))) {
+		f->R.rax = -1;
+		return;
+	}
 
     lock_acquire(&filesys_lock);
     int length = (int)file_length(file);
@@ -334,6 +341,10 @@ void syscall_handler(struct intr_frame *f) {
       f->R.rax = -1;
       return;
     }
+	if (inode_is_dir (file_get_inode (file))) {
+		f->R.rax = -1;
+		return;
+	}
 
     off_t bytes_read = 0;
     lock_acquire(&filesys_lock);
@@ -382,6 +393,10 @@ void syscall_handler(struct intr_frame *f) {
       f->R.rax = -1;
       return;
     }
+	if (inode_is_dir (file_get_inode (file))) {
+		f->R.rax = -1;
+		return;
+	}
 
     off_t bytes_written = 0;
     lock_acquire(&filesys_lock);
@@ -443,6 +458,96 @@ void syscall_handler(struct intr_frame *f) {
     lock_release(&filesys_lock);
     return;
   }
+
+	case SYS_CHDIR: {
+		char *dir = copy_in_string ((const char *) f->R.rdi);
+		lock_acquire (&filesys_lock);
+		bool ok = filesys_chdir (dir);
+		lock_release (&filesys_lock);
+		palloc_free_page (dir);
+		f->R.rax = ok;
+		return;
+	}
+
+	case SYS_MKDIR: {
+		char *dir = copy_in_string ((const char *) f->R.rdi);
+		lock_acquire (&filesys_lock);
+		bool ok = filesys_mkdir (dir);
+		lock_release (&filesys_lock);
+		palloc_free_page (dir);
+		f->R.rax = ok;
+		return;
+	}
+
+	case SYS_READDIR: {
+		int fd = (int) f->R.rdi;
+		char *name = (char *) f->R.rsi;
+		validate_user_writable_buffer (name, NAME_MAX + 1);
+
+		struct file *file = get_file (fd);
+		if (file == NULL) {
+			f->R.rax = false;
+			return;
+		}
+
+		lock_acquire (&filesys_lock);
+		if (!inode_is_dir (file_get_inode (file))) {
+			lock_release (&filesys_lock);
+			f->R.rax = false;
+			return;
+		}
+
+		struct dir_entry e;
+		while (file_read (file, &e, (off_t) sizeof e) == (off_t) sizeof e) {
+			if (e.in_use && strcmp (e.name, ".") && strcmp (e.name, "..")) {
+				strlcpy (name, e.name, NAME_MAX + 1);
+				lock_release (&filesys_lock);
+				f->R.rax = true;
+				return;
+			}
+		}
+		lock_release (&filesys_lock);
+		f->R.rax = false;
+		return;
+	}
+
+	case SYS_ISDIR: {
+		int fd = (int) f->R.rdi;
+		struct file *file = get_file (fd);
+		if (file == NULL) {
+			f->R.rax = false;
+			return;
+		}
+		lock_acquire (&filesys_lock);
+		f->R.rax = inode_is_dir (file_get_inode (file));
+		lock_release (&filesys_lock);
+		return;
+	}
+
+	case SYS_INUMBER: {
+		int fd = (int) f->R.rdi;
+		struct file *file = get_file (fd);
+		if (file == NULL) {
+			f->R.rax = -1;
+			return;
+		}
+		lock_acquire (&filesys_lock);
+		f->R.rax = (int) inode_get_inumber (file_get_inode (file));
+		lock_release (&filesys_lock);
+		return;
+	}
+
+	case SYS_SYMLINK: {
+		char *target = copy_in_string ((const char *) f->R.rdi);
+		char *linkpath = copy_in_string ((const char *) f->R.rsi);
+		lock_acquire (&filesys_lock);
+		int ret = filesys_symlink (target, linkpath);
+		lock_release (&filesys_lock);
+		palloc_free_page (target);
+		palloc_free_page (linkpath);
+		f->R.rax = ret;
+		return;
+	}
 
 #ifdef VM
   case SYS_MMAP: {

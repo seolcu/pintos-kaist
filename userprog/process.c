@@ -69,6 +69,8 @@ static void process_init(void) {
 #ifdef VM
   list_init(&current->mmap_list);
 #endif
+	if (current->cwd == NULL)
+		current->cwd = dir_open_root ();
 }
 
 /* Starts the first userland program, called "initd", loaded from FILE_NAME.
@@ -286,6 +288,12 @@ static void __do_fork(void *aux) {
     }
   }
   current->next_fd = parent->next_fd;
+	if (parent->cwd != NULL)
+		current->cwd = dir_reopen (parent->cwd);
+	else
+		current->cwd = dir_open_root ();
+	if (current->cwd == NULL)
+		goto error;
   process_init();
 
   /* Finally, switch to the newly created process. */
@@ -430,6 +438,10 @@ void process_exit(void) {
     file_close(curr->exec_file);
     curr->exec_file = NULL;
   }
+	if (curr->cwd != NULL) {
+		dir_close (curr->cwd);
+		curr->cwd = NULL;
+	}
 
   /* Only print exit message for user processes */
   if (curr->pml4 != NULL)

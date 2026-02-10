@@ -7,11 +7,22 @@
 
 struct bitmap;
 
+enum inode_type {
+	INODE_FILE = 0,
+	INODE_DIR = 1,
+	INODE_SYMLINK = 2,
+};
+
 void inode_init (void);
 bool inode_create (disk_sector_t, off_t);
+bool inode_create_dir (disk_sector_t, off_t);
+bool inode_create_symlink (disk_sector_t, off_t);
 struct inode *inode_open (disk_sector_t);
 struct inode *inode_reopen (struct inode *);
 disk_sector_t inode_get_inumber (const struct inode *);
+int inode_get_open_cnt (const struct inode *);
+bool inode_is_dir (const struct inode *);
+bool inode_is_symlink (const struct inode *);
 void inode_close (struct inode *);
 void inode_remove (struct inode *);
 off_t inode_read_at (struct inode *, void *, off_t size, off_t offset);

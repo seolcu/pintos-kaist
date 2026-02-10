@@ -11,6 +11,7 @@
 #endif
 #ifdef USERPROG
 struct file;
+struct dir;
 struct child_info;
 #endif
 
@@ -117,6 +118,7 @@ struct thread {
   struct lock children_lock;
   struct child_info *child_info;
   struct file *exec_file;
+  struct dir *cwd;
 #endif
 #ifdef VM
   /* Table for whole virtual memory owned by thread. */
